@@ -1,0 +1,102 @@
+esphome:
+  name: garage-door
+  platform: ESP8266
+  board: esp12e
+  includes:
+    - garage-door-includes
+
+wifi:
+  networks:
+  - ssid: !secret wifi_ssid
+    password: !secret wifi_password
+
+
+#  # Enable fallback hotspot (captive portal) in case wifi connection fails
+#  ap:
+#    ssid: "ESPHome Hotspot"
+#    password: !secret wifi_key_1
+#             
+#captive_portal:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret garage_door_key
+ota:
+  password: !secret ota_password
+
+# Enable logging
+logger:
+  level: DEBUG
+  esp8266_store_log_strings_in_flash: False
+  baud_rate: 0 # Disable Serial logging to avoid conflict with uart bus on UART0
+
+uart:
+  id: uart_bus
+  tx_pin: GPIO15
+  rx_pin: GPIO13
+  baud_rate: 19200
+
+i2c:
+  sda: 4
+  scl: 5
+  scan: true
+  #id: bus_a
+
+custom_component:
+  - id: garage_door_comp
+    lambda: |-
+      auto door_component = new GarageDoorComponent(id(uart_bus));
+      return {door_component};
+
+text_sensor:
+  - platform: custom
+    id: garagedoor
+    lambda: |-
+      return {garage_door_get_comp(garage_door_comp)->state_sensor};
+    text_sensors:
+      name: "esp_garage_door_state"
+
+cover:
+  - platform: template
+    id: garage_door_template
+    name: "esp_garage_door"
+    device_class: garage
+    open_action:
+      - lambda: |-
+          garage_door_get_comp(garage_door_comp)->action_open();
+      - logger.log: "Template Garage open"
+    close_action:
+      - lambda: |-
+          garage_door_get_comp(garage_door_comp)->action_close();
+      - logger.log: "Template Garage close"
+    stop_action:
+      - lambda: |-
+          garage_door_get_comp(garage_door_comp)->action_stop();
+      - logger.log: "Template Garage stop"
+    optimistic: true
+    assumed_state: true
+
+switch:
+- platform: custom
+  lambda: |-
+    return {
+      garage_door_get_comp(garage_door_comp)->venting_switch,
+      garage_door_get_comp(garage_door_comp)->light_switch
+    };
+  switches:
+    - name: "esp_garage_door_venting_position"
+    - name: "esp_garage_door_light_toggle"
+
+
+sensor:
+  - platform: bme280
+    temperature:
+      name: "Temperature"
+      oversampling: 16x
+    pressure:
+      name: "Pressure"
+    humidity:
+      name: "Humidity"
+    address: 0x76
+    update_interval: 60s
